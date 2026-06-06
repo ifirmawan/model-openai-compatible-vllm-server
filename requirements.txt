@@ -1,0 +1,9 @@
+# Local machine dependencies — the container image is defined in vllm_inference.py
+modal==1.3.5
+openai==1.76.0
+aiohttp==3.11.18
+python-dotenv==1.1.0
+
+# Dev / test
+pytest==8.3.5
+pytest-asyncio==0.25.3
