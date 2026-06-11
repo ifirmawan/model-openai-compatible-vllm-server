@@ -1,4 +1,3 @@
-# --- # pytest: false # --- #
 # Run OpenAI-compatible LLM inference with Gemma and vLLM
 #
 # Deploy:   modal deploy vllm_inference.py
@@ -10,11 +9,6 @@ from typing import Any
 
 import aiohttp
 import modal
-from dotenv import load_dotenv
-
-load_dotenv()  # loads .env into os.environ
-
-HF_TOKEN = os.environ["HF_TOKEN"]  # required — set in .env
 
 # ## Container image
 # Installed on top of the CUDA 12.9 base image provided by Modal.
@@ -63,7 +57,9 @@ VLLM_PORT = 8000
     gpu=f"H200:{N_GPU}",
     scaledown_window=15 * MINUTES,
     timeout=10 * MINUTES,
-    secrets=[modal.Secret.from_dict({"HF_TOKEN": HF_TOKEN})],
+    # HF_TOKEN is stored in a Modal named secret.
+    # Create it once with: modal secret create huggingface HF_TOKEN=<your-token>
+    secrets=[modal.Secret.from_name("huggingface")],
     volumes={
         "/root/.cache/huggingface": hf_cache_vol,
         "/root/.cache/vllm": vllm_cache_vol,
@@ -105,34 +101,61 @@ def serve():
 # Runs locally while a fresh server replica spins up on Modal.
 # Usage: modal run vllm_inference.py
 @app.local_entrypoint()
-async def test(test_timeout=15 * MINUTES, content=None, twice=True):
+async def test(test_timeout=15 * MINUTES):
     url = await serve.get_web_url.aio()
 
     system_prompt = {
         "role": "system",
-        "content": "You are a pirate who can't help but drop sly reminders that he went to Harvard.",
+        "content": (
+            "You are an expert editorial assistant specialising in technical blog posts. "
+            "When given a Markdown document, polish it according to these rules:\n"
+            "1. Preserve every fact, figure, and technical detail exactly as given — do not invent or omit anything.\n"
+            "2. Preserve the Markdown structure and any YAML/TOML frontmatter unchanged.\n"
+            "3. Remove generic AI phrasing (e.g. 'In conclusion', 'It is worth noting', 'Delve into', 'Leverage').\n"
+            "4. Improve narrative flow so sentences read naturally, not like a list of disconnected facts.\n"
+            "5. Keep technical detail concrete — expand acronyms on first use, keep code blocks verbatim.\n"
+            "6. Do not add new sections, bullet points, or content that was not in the original.\n"
+            "Return only the polished Markdown document, with no commentary before or after it."
+        ),
     }
-    if content is None:
-        content = "Explain the singular value decomposition."
+
+    sample_post = """\
+---
+title: "Deploying Gemma 4 on Modal"
+date: 2026-06-11
+tags: [llm, modal, vllm]
+---
+
+## Introduction
+
+In this post we will delve into the process of deploying Gemma 4 26B-A4B-it
+on Modal using vLLM. It is worth noting that this model leverages a
+Mixture-of-Experts architecture, which means it activates only 4B parameters
+per token despite having 26B total parameters.
+
+## Setup
+
+Firstly, you need to install the required dependencies. The key dependency is
+vllm==0.21.0. You also need a Hugging Face token to download the gated weights.
+
+## Conclusion
+
+In conclusion, deploying Gemma 4 on Modal is straightforward and cost-effective.
+"""
 
     messages = [
         system_prompt,
-        {"role": "user", "content": content},
+        {"role": "user", "content": f"Please polish the following post:\n\n{sample_post}"},
     ]
 
     async with aiohttp.ClientSession(base_url=url) as session:
         print(f"Running health check for server at {url}")
         async with session.get("/health", timeout=test_timeout - 1 * MINUTES) as resp:
             assert resp.status == 200, f"Health check failed for server at {url}"
-        print(f"Health check passed ✓")
+        print("Health check passed ✓")
 
-        print(f"Sending messages to {url}:", *messages, sep="\n\t")
+        print(f"Sending blog-polish request to {url}:")
         await _send_request(session, "llm", messages)
-
-        if twice:
-            messages[0]["content"] = "You are Jar Jar Binks."
-            print(f"Sending messages to {url}:", *messages, sep="\n\t")
-            await _send_request(session, "llm", messages)
 
 
 async def _send_request(

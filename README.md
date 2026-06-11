@@ -18,12 +18,11 @@ Based on the official [Modal vLLM inference example](https://modal.com/docs/exam
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Configure secrets
-cp .env.example .env
-# Edit .env and set HF_TOKEN=<your-huggingface-token>
-
-# 3. Authenticate with Modal
+# 2. Authenticate with Modal
 modal setup
+
+# 3. Store your Hugging Face token as a Modal named secret
+modal secret create huggingface HF_TOKEN=<your-huggingface-token>
 ```
 
 > The Gemma 4 model is gated. Accept the licence at
@@ -50,8 +49,50 @@ Subsequent deploys reuse the cached image and weights.
 modal run vllm_inference.py
 ```
 
-This spins up a fresh replica, runs a health-check, and sends two chat completions while
-streaming the output to your terminal. No GPU is required on your local machine.
+This spins up a fresh replica, runs a health check, then sends a blog-polishing
+completion request and streams the output to your terminal. No GPU is required
+on your local machine.
+
+## Health check
+
+```bash
+curl https://<workspace>--example-vllm-inference-serve.modal.run/health
+# → 200 OK
+```
+
+## Chat completions (non-streaming)
+
+```bash
+curl -s https://<workspace>--example-vllm-inference-serve.modal.run/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llm",
+    "stream": false,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a concise assistant."
+      },
+      {
+        "role": "user",
+        "content": "What is vLLM?"
+      }
+    ]
+  }' | python3 -m json.tool
+```
+
+## Vibe2Blog integration
+
+Set these two environment variables in your Vibe2Blog deployment:
+
+```bash
+MODAL_VLLM_BASE_URL=https://<workspace>--example-vllm-inference-serve.modal.run/v1
+MODAL_VLLM_MODEL=llm
+```
+
+The server registers the model under both its full HuggingFace name
+(`google/gemma-4-26B-A4B-it`) and the short alias `llm`, so
+`MODAL_VLLM_MODEL=llm` always works regardless of which model is deployed.
 
 ## Client
 
@@ -114,6 +155,8 @@ Tests run locally without any GPU or Modal credentials. They cover:
 │   └── client.py              # CLI client using the openai Python SDK
 ├── tests/
 │   └── test_vllm_inference.py # Unit tests (no GPU required)
+├── docs/
+│   └── api-docs.md  # Full API reference (endpoints, request/response schemas)
 ├── requirements.txt           # Pinned local dependencies
 └── pytest.ini                 # pytest configuration
 ```
