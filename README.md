@@ -37,7 +37,7 @@ modal deploy vllm_inference.py
 After a successful deploy you will see a URL like:
 
 ```
-https://<workspace>--example-vllm-inference-serve.modal.run
+https://<workspace>--vibe2blog-backend-serve.modal.run
 ```
 
 The first deploy builds the container image and downloads the model weights (~52 GB).
@@ -56,14 +56,14 @@ on your local machine.
 ## Health check
 
 ```bash
-curl https://<workspace>--example-vllm-inference-serve.modal.run/health
+curl https://<workspace>--vibe2blog-backend-serve.modal.run/health
 # → 200 OK
 ```
 
 ## Chat completions (non-streaming)
 
 ```bash
-curl -s https://<workspace>--example-vllm-inference-serve.modal.run/v1/chat/completions \
+curl -s https://<workspace>--vibe2blog-backend-serve.modal.run/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llm",
@@ -86,7 +86,7 @@ curl -s https://<workspace>--example-vllm-inference-serve.modal.run/v1/chat/comp
 Set these two environment variables in your Vibe2Blog deployment:
 
 ```bash
-MODAL_VLLM_BASE_URL=https://<workspace>--example-vllm-inference-serve.modal.run/v1
+MODAL_VLLM_BASE_URL=https://<workspace>--vibe2blog-backend-serve.modal.run/v1
 MODAL_VLLM_MODEL=llm
 ```
 
@@ -114,7 +114,7 @@ Full CLI reference:
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--model` | auto-detect | Override model ID |
-| `--app-name` | `example-vllm-inference` | Modal app name |
+| `--app-name` | `vibe2blog-backend` | Modal app name |
 | `--function-name` | `serve` | Modal function name |
 | `--workspace` | current profile | Modal workspace |
 | `--environment` | current env | Modal environment |

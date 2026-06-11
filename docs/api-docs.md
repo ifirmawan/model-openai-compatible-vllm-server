@@ -1,6 +1,6 @@
 # API Documentation
 
-Base URL: `https://<workspace>--example-vllm-inference-serve.modal.run`
+Base URL: `https://<workspace>--vibe2blog-backend-serve.modal.run`
 
 The server is OpenAI API-compatible. Any client that works with `openai.OpenAI(base_url=...)` works here.
 
@@ -19,7 +19,7 @@ No API key is required. The server is protected at the network level by Modal.
 Liveness check. Returns `200 OK` with an empty body when the server is ready.
 
 ```bash
-curl https://<workspace>--example-vllm-inference-serve.modal.run/health
+curl https://<workspace>--vibe2blog-backend-serve.modal.run/health
 ```
 
 **Response**
@@ -35,7 +35,7 @@ HTTP/1.1 200 OK
 Lists the model IDs registered on the server.
 
 ```bash
-curl https://<workspace>--example-vllm-inference-serve.modal.run/v1/models
+curl https://<workspace>--vibe2blog-backend-serve.modal.run/v1/models
 ```
 
 **Response**
@@ -74,7 +74,7 @@ OpenAI-compatible chat completions endpoint. Supports both streaming (SSE) and n
 #### Non-streaming example
 
 ```bash
-curl -s https://<workspace>--example-vllm-inference-serve.modal.run/v1/chat/completions \
+curl -s https://<workspace>--vibe2blog-backend-serve.modal.run/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llm",
@@ -114,7 +114,7 @@ curl -s https://<workspace>--example-vllm-inference-serve.modal.run/v1/chat/comp
 #### Streaming example
 
 ```bash
-curl -s https://<workspace>--example-vllm-inference-serve.modal.run/v1/chat/completions \
+curl -s https://<workspace>--vibe2blog-backend-serve.modal.run/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Accept: text/event-stream" \
   -d '{
@@ -167,7 +167,7 @@ Reasoning tokens arrive in `delta.reasoning` before the final `delta.content` an
 Set these two environment variables in your Vibe2Blog deployment:
 
 ```bash
-MODAL_VLLM_BASE_URL=https://<workspace>--example-vllm-inference-serve.modal.run/v1
+MODAL_VLLM_BASE_URL=https://<workspace>--vibe2blog-backend-serve.modal.run/v1
 MODAL_VLLM_MODEL=llm
 ```
 
@@ -193,7 +193,7 @@ Return only the polished Markdown document, with no commentary before or after i
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://<workspace>--example-vllm-inference-serve.modal.run/v1",
+    base_url="https://<workspace>--vibe2blog-backend-serve.modal.run/v1",
     api_key="unused",
 )
 

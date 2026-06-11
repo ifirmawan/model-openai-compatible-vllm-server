@@ -45,7 +45,7 @@ vllm_cache_vol = modal.Volume.from_name("vllm-cache", create_if_missing=True)
 FAST_BOOT = False
 
 # ## App
-app = modal.App("example-vllm-inference")
+app = modal.App("vibe2blog-backend")
 
 N_GPU = 1
 MINUTES = 60  # seconds
