@@ -95,8 +95,27 @@ def serve():
     print(*cmd)
     subprocess.Popen(" ".join(cmd), shell=True)
 
-    proxy = fastapi.FastAPI()
+    import asyncio
+    from contextlib import asynccontextmanager
+
     vllm_base = f"http://0.0.0.0:{VLLM_PORT}"
+
+    @asynccontextmanager
+    async def lifespan(app):
+        # Block until vLLM is ready before accepting any traffic
+        async with httpx.AsyncClient() as client:
+            for _ in range(600):  # up to 10 minutes
+                try:
+                    r = await client.get(f"{vllm_base}/health", timeout=2)
+                    if r.status_code == 200:
+                        print("vLLM ready ✓")
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
+        yield
+
+    proxy = fastapi.FastAPI(lifespan=lifespan)
 
     @proxy.get("/healthz")
     async def health():
