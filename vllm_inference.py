@@ -96,39 +96,34 @@ def serve():
     subprocess.Popen(" ".join(cmd), shell=True)
 
     import asyncio
-    from contextlib import asynccontextmanager
 
     vllm_base = f"http://0.0.0.0:{VLLM_PORT}"
 
-    @asynccontextmanager
-    async def lifespan(app):
-        # Block until vLLM is ready before accepting any traffic
-        async with httpx.AsyncClient() as client:
-            for _ in range(600):  # up to 10 minutes
-                try:
-                    r = await client.get(f"{vllm_base}/health", timeout=2)
-                    if r.status_code == 200:
-                        print("vLLM ready ✓")
-                        break
-                except Exception:
-                    pass
-                await asyncio.sleep(1)
-        yield
+    async def wait_for_vllm(client: httpx.AsyncClient) -> None:
+        """Poll until vLLM is accepting connections."""
+        for _ in range(600):
+            try:
+                r = await client.get(f"{vllm_base}/health", timeout=2)
+                if r.status_code == 200:
+                    return
+            except Exception:
+                pass
+            await asyncio.sleep(1)
 
-    proxy = fastapi.FastAPI(lifespan=lifespan)
+    proxy = fastapi.FastAPI()
 
     @proxy.get("/healthz")
     async def health():
         async with httpx.AsyncClient() as client:
-            r = await client.get(f"{vllm_base}/health")
-            r.raise_for_status()
-        return {"status": "ok"}
+            await wait_for_vllm(client)
+            return {"status": "ok"}
 
     @proxy.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
     async def passthrough(path: str, request: fastapi.Request):
         body = await request.body()
         headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
         client = httpx.AsyncClient(timeout=None)
+        await wait_for_vllm(client)
         r = await client.send(
             client.build_request(
                 method=request.method,
