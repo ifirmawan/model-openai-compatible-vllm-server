@@ -113,7 +113,7 @@ def main():
     parser.add_argument("--model", type=str, default=None)
     parser.add_argument("--workspace", type=str, default=None)
     parser.add_argument("--environment", type=str, default=None)
-    parser.add_argument("--app-name", type=str, default="example-vllm-inference")
+    parser.add_argument("--app-name", type=str, default="vibe2blog-backend")
     parser.add_argument("--function-name", type=str, default="serve")
     parser.add_argument("--api-key", type=str, default="super-secret-key")
     parser.add_argument("--max-tokens", type=int, default=None)
