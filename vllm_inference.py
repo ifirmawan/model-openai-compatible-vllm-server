@@ -98,7 +98,7 @@ def serve():
     proxy = fastapi.FastAPI()
     vllm_base = f"http://0.0.0.0:{VLLM_PORT}"
 
-    @proxy.get("/health")
+    @proxy.get("/healthz")
     async def health():
         async with httpx.AsyncClient() as client:
             r = await client.get(f"{vllm_base}/health")
