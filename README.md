@@ -56,9 +56,11 @@ on your local machine.
 ## Health check
 
 ```bash
-curl https://<workspace>--vibe2blog-backend-serve.modal.run/health
-# → 200 OK
+curl https://<workspace>--vibe2blog-backend-serve.modal.run/healthz
+# → {"status": "ok"}
 ```
+
+> `/healthz` blocks until vLLM is ready and returns JSON. `/health` is intercepted by Modal's edge and returns `200` with an empty body.
 
 ## Chat completions (non-streaming)
 

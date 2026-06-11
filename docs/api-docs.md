@@ -14,19 +14,21 @@ No API key is required. The server is protected at the network level by Modal.
 
 ## Endpoints
 
-### `GET /health`
+### `GET /healthz`
 
-Liveness check. Returns `200 OK` with an empty body when the server is ready.
+Liveness check. Returns `{"status": "ok"}` once vLLM is fully loaded and accepting requests. Blocks during cold start until the model is ready (up to ~2 min with cached weights).
 
 ```bash
-curl https://<workspace>--vibe2blog-backend-serve.modal.run/health
+curl https://<workspace>--vibe2blog-backend-serve.modal.run/healthz
 ```
 
 **Response**
 
+```json
+{"status": "ok"}
 ```
-HTTP/1.1 200 OK
-```
+
+> `GET /health` is intercepted by Modal's infrastructure and returns `200` with an empty body — use `/healthz` when you need a JSON response.
 
 ---
 
