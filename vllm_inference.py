@@ -15,7 +15,7 @@ import modal
 vllm_image = (
     modal.Image.from_registry("nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12")
     .entrypoint([])
-    .uv_pip_install("vllm==0.21.0")
+    .uv_pip_install("vllm==0.21.0", "fastapi==0.115.12", "httpx==0.28.1")
     .env(
         {
             "HF_XET_HIGH_PERFORMANCE": "1",   # faster model transfers from HF
@@ -66,10 +66,13 @@ VLLM_PORT = 8000
     },
 )
 @modal.concurrent(max_inputs=100)
-@modal.web_server(port=VLLM_PORT, startup_timeout=10 * MINUTES)
+@modal.asgi_app()
 def serve():
-    """Launch the vLLM OpenAI-compatible server as a subprocess."""
+    """FastAPI proxy in front of vLLM — /health returns JSON; all other routes stream through."""
     import subprocess
+    import fastapi
+    import fastapi.responses
+    import httpx
 
     cmd = [
         "vllm", "serve", MODEL_NAME,
@@ -81,20 +84,60 @@ def serve():
         "--async-scheduling",
         "--enforce-eager" if FAST_BOOT else "--no-enforce-eager",
         "--tensor-parallel-size", str(N_GPU),
-        # Disable multimodal inputs to save VRAM
         "--limit-mm-per-prompt",
         f"'{json.dumps({'image': 0, 'video': 0, 'audio': 0})}'",
-        # Reasoning + tool-use support
         "--enable-auto-tool-choice",
         "--reasoning-parser gemma4",
         "--tool-call-parser gemma4",
-        # Speculative decoding (MTP) for better throughput at low concurrency
         "--speculative-config",
         f"'{json.dumps({'model': SPECULATIVE_MODEL_NAME, 'revision': SPECULATIVE_MODEL_REVISION, 'num_speculative_tokens': 4})}'",
     ]
-
     print(*cmd)
     subprocess.Popen(" ".join(cmd), shell=True)
+
+    proxy = fastapi.FastAPI()
+    vllm_base = f"http://0.0.0.0:{VLLM_PORT}"
+
+    @proxy.get("/health")
+    async def health():
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"{vllm_base}/health")
+            r.raise_for_status()
+        return {"status": "ok"}
+
+    @proxy.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    async def passthrough(path: str, request: fastapi.Request):
+        body = await request.body()
+        headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+        client = httpx.AsyncClient(timeout=None)
+        r = await client.send(
+            client.build_request(
+                method=request.method,
+                url=f"{vllm_base}/{path}",
+                headers=headers,
+                content=body,
+                params=request.query_params,
+            ),
+            stream=True,
+        )
+        resp_headers = {
+            k: v for k, v in r.headers.items()
+            if k.lower() not in ("transfer-encoding", "content-encoding")
+        }
+
+        async def body_iter():
+            async for chunk in r.aiter_raw():
+                yield chunk
+            await r.aclose()
+            await client.aclose()
+
+        return fastapi.responses.StreamingResponse(
+            body_iter(),
+            status_code=r.status_code,
+            headers=resp_headers,
+        )
+
+    return proxy
 
 
 # ## Local entrypoint (smoke test)
