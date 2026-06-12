@@ -20,6 +20,7 @@ vllm_image = (
         {
             "HF_XET_HIGH_PERFORMANCE": "1",   # faster model transfers from HF
             "VLLM_LOG_STATS_INTERVAL": "1",   # emit metrics every second
+            "APP_REGISTRY_DB": "/data/app_registry.sqlite3",
         }
     )
 )
@@ -38,6 +39,7 @@ SPECULATIVE_MODEL_REVISION = "f188f476dc11dd5bb3014dc861529d316bce49d3"
 # Persisted across cold starts via Modal Volumes.
 hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
 vllm_cache_vol = modal.Volume.from_name("vllm-cache", create_if_missing=True)
+app_registry_vol = modal.Volume.from_name("app-registry", create_if_missing=True)
 
 # ## Performance knob
 # FAST_BOOT=True  → skip Torch compilation & CUDA-graph capture (faster cold start)
@@ -63,6 +65,7 @@ VLLM_PORT = 8000
     volumes={
         "/root/.cache/huggingface": hf_cache_vol,
         "/root/.cache/vllm": vllm_cache_vol,
+        "/data": app_registry_vol,
     },
 )
 @modal.concurrent(max_inputs=100)
@@ -73,6 +76,7 @@ def serve():
     import fastapi
     import fastapi.responses
     import httpx
+    from app_registry import verify_api_key
 
     cmd = [
         "vllm", "serve", MODEL_NAME,
@@ -97,7 +101,15 @@ def serve():
 
     import asyncio
 
-    vllm_base = f"http://0.0.0.0:{VLLM_PORT}"
+    vllm_base = f"http://127.0.0.1:{VLLM_PORT}"
+    registry_db = os.getenv("APP_REGISTRY_DB", "/data/app_registry.sqlite3")
+    auth_enabled = os.getenv("VLLM_API_KEY_AUTH_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+
+    def authorized(request: fastapi.Request) -> bool:
+        """Allow only registered clients to reach vLLM endpoints."""
+        if not auth_enabled:
+            return True
+        return verify_api_key(request.headers.get("x-api-key", ""), db_path=registry_db)
 
     async def wait_for_vllm(client: httpx.AsyncClient) -> None:
         """Poll until vLLM is accepting connections."""
@@ -120,8 +132,16 @@ def serve():
 
     @proxy.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
     async def passthrough(path: str, request: fastapi.Request):
+        if not authorized(request):
+            return fastapi.responses.JSONResponse(
+                {"error": "Invalid, missing, or expired X-API-Key."},
+                status_code=401,
+            )
         body = await request.body()
-        headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+        headers = {
+            k: v for k, v in request.headers.items()
+            if k.lower() not in ("host", "x-api-key")
+        }
         client = httpx.AsyncClient(timeout=None)
         await wait_for_vllm(client)
         r = await client.send(
@@ -152,6 +172,25 @@ def serve():
         )
 
     return proxy
+
+
+@app.function(volumes={"/data": app_registry_vol})
+def register_client(name: str, expired: str, api_key: str | None = None) -> dict[str, str]:
+    """Register an API client directly in the Modal app-registry volume."""
+    from app_registry import register_app
+
+    app_client = register_app(
+        name=name,
+        expires_at=expired,
+        db_path="/data/app_registry.sqlite3",
+        api_key=api_key,
+    )
+    app_registry_vol.commit()
+    return {
+        "name": app_client.name,
+        "expires_at": app_client.expires_at,
+        "api_key": app_client.api_key,
+    }
 
 
 # ## Local entrypoint (smoke test)

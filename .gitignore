@@ -2,3 +2,7 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+*.db
+*.db-*
+*.sqlite3
+*.sqlite3-*

@@ -8,7 +8,28 @@ The server is OpenAI API-compatible. Any client that works with `openai.OpenAI(b
 
 ## Authentication
 
-No API key is required. The server is protected at the network level by Modal.
+All `/v1/*` routes require an `X-API-Key` header. API keys are registered per
+client app and stored as SHA-256 hashes in a SQLite registry.
+
+`GET /healthz` does not require an API key.
+
+Register the main Vibe2Blog client in the deployed Modal volume:
+
+```bash
+modal run vllm_inference.py::register_client --name vibe2blog --expired 2027-01-01
+```
+
+For local registry workflows, use:
+
+```bash
+python -m register_apps --name="vibe2blog" --expired=2027-01-01
+```
+
+The command prints the raw key once. Send it as:
+
+```http
+X-API-Key: <api-key>
+```
 
 ---
 
@@ -38,6 +59,7 @@ Lists the model IDs registered on the server.
 
 ```bash
 curl https://<workspace>--vibe2blog-backend-serve.modal.run/v1/models
+  -H "X-API-Key: <api-key>"
 ```
 
 **Response**
@@ -78,6 +100,7 @@ OpenAI-compatible chat completions endpoint. Supports both streaming (SSE) and n
 ```bash
 curl -s https://<workspace>--vibe2blog-backend-serve.modal.run/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: <api-key>" \
   -d '{
     "model": "llm",
     "stream": false,
@@ -119,6 +142,7 @@ curl -s https://<workspace>--vibe2blog-backend-serve.modal.run/v1/chat/completio
 curl -s https://<workspace>--vibe2blog-backend-serve.modal.run/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Accept: text/event-stream" \
+  -H "X-API-Key: <api-key>" \
   -d '{
     "model": "llm",
     "stream": true,
@@ -171,6 +195,7 @@ Set these two environment variables in your Vibe2Blog deployment:
 ```bash
 MODAL_VLLM_BASE_URL=https://<workspace>--vibe2blog-backend-serve.modal.run/v1
 MODAL_VLLM_MODEL=llm
+MODAL_VLLM_API_KEY=<api-key>
 ```
 
 Recommended system prompt for editorial polishing:
@@ -197,6 +222,7 @@ from openai import OpenAI
 client = OpenAI(
     base_url="https://<workspace>--vibe2blog-backend-serve.modal.run/v1",
     api_key="unused",
+    default_headers={"X-API-Key": "<api-key>"},
 )
 
 response = client.chat.completions.create(

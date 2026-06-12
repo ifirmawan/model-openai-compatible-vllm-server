@@ -43,6 +43,27 @@ https://<workspace>--vibe2blog-backend-serve.modal.run
 The first deploy builds the container image and downloads the model weights (~52 GB).
 Subsequent deploys reuse the cached image and weights.
 
+## Register API Clients
+
+The public vLLM routes require an `X-API-Key` header. Keys are stored as SHA-256
+hashes in a SQLite registry and should never be committed.
+
+For local registry workflows:
+
+```bash
+python -m register_apps --name="vibe2blog" --expired=2027-01-01
+```
+
+For the deployed Modal backend, register directly into the persistent
+`app-registry` volume:
+
+```bash
+modal run vllm_inference.py::register_client --name vibe2blog --expired 2027-01-01
+```
+
+The command prints the raw API key once. Store it in the Vibe2Blog Space secret
+as `MODAL_VLLM_API_KEY`.
+
 ## Smoke-test (modal run)
 
 ```bash
@@ -67,6 +88,7 @@ curl https://<workspace>--vibe2blog-backend-serve.modal.run/healthz
 ```bash
 curl -s https://<workspace>--vibe2blog-backend-serve.modal.run/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: <api-key>" \
   -d '{
     "model": "llm",
     "stream": false,
@@ -90,6 +112,7 @@ Set these two environment variables in your Vibe2Blog deployment:
 ```bash
 MODAL_VLLM_BASE_URL=https://<workspace>--vibe2blog-backend-serve.modal.run/v1
 MODAL_VLLM_MODEL=llm
+MODAL_VLLM_API_KEY=<api-key-from-register-client>
 ```
 
 The server registers the model under both its full HuggingFace name
@@ -137,6 +160,8 @@ Edit the top of `vllm_inference.py` to change:
 | `MODEL_REVISION` | pinned SHA | Exact weights revision |
 | `FAST_BOOT` | `False` | `True` → skip JIT compilation for faster cold starts |
 | `N_GPU` | `1` | Number of H200s (increase for larger models) |
+| `VLLM_API_KEY_AUTH_ENABLED` | `true` | Require `X-API-Key` for `/v1/*` routes |
+| `APP_REGISTRY_DB` | `/data/app_registry.sqlite3` | SQLite registry path in Modal |
 
 ## Run tests
 
@@ -147,6 +172,7 @@ pytest
 Tests run locally without any GPU or Modal credentials. They cover:
 - Configuration constants (model name/revision pinning, port, GPU count)
 - SSE stream parsing in `_send_request` (content, reasoning, [DONE] sentinel, bad object type)
+- SQLite app registry registration, key rotation, and expiry checks
 
 ## Project structure
 
